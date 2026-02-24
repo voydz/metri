@@ -1,0 +1,35 @@
+[project]
+name = "metri"
+version = "0.1.0"
+description = "CLI for logging and querying health/fitness metrics"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "tabulate>=0.9.0",
+]
+
+[project.scripts]
+metri = "metricli.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/metricli"]
+
+[tool.uv]
+dev-dependencies = [
+    "pyinstaller>=6.0.0",
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"

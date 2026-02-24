@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: macos-14
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build binary
+        run: make build
+
+      - name: Package
+        run: make package
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/metri-macos-arm64.tar.gz
+            dist/metri-macos-arm64.tar.gz.sha256
+
+      - name: Bump Homebrew tap
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+        run: |
+          brew tap "${{ github.repository_owner }}/homebrew-tap"
+          brew bump-formula-pr "${{ github.repository_owner }}/tap/metri"
