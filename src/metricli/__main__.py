@@ -51,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Return average by metric_key instead of raw rows",
     )
+    query_parser.add_argument(
+        "--trend",
+        action="store_true",
+        help="Return trend by metric_key over the selected range",
+    )
 
     return parser
 
@@ -124,7 +129,10 @@ def handle_query(conn, args) -> None:
     start_date = None
     if args.last:
         start_date = _parse_last_days(args.last)
-    if args.avg:
+    if args.trend:
+        rows = db.fetch_trends_range(conn, start_date=start_date)
+        _render(args.format, rows)
+    elif args.avg:
         rows = db.fetch_avg_range(conn, start_date=start_date)
         _render(args.format, rows)
     else:

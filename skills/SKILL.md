@@ -36,6 +36,9 @@ metri query --last 7d
 # Query averages
 metri query --last 30d --avg
 
+# Query trend
+metri query --last 30d --trend
+
 # Delete
 metri delete 12
 ```
@@ -44,7 +47,7 @@ metri delete 12
 - `log`: `--key` `--value` `--source` `--date` `--time` `--format`
 - `delete`: `id`
 - `today`: `--format`
-- `query`: `--last` `--avg` `--format`
+- `query`: `--last` `--avg` `--trend` `--format`
 
 ## Output format
 - `table` (default): human-friendly rows

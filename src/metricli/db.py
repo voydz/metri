@@ -176,6 +176,91 @@ def fetch_avg_range(
     ]
 
 
+def fetch_trends_range(
+    conn: sqlite3.Connection,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict[str, str | float | int | None]]:
+    clauses: list[str] = []
+    params: list[str] = []
+    if start_date:
+        clauses.append("date >= ?")
+        params.append(start_date)
+    if end_date:
+        clauses.append("date <= ?")
+        params.append(end_date)
+    where_sql = ""
+    if clauses:
+        where_sql = "WHERE " + " AND ".join(clauses)
+
+    rows = conn.execute(
+        f"""
+        WITH filtered AS (
+            SELECT id, date, time, metric_key, value
+            FROM metrics
+            {where_sql}
+        ),
+        stats AS (
+            SELECT metric_key, COUNT(*) AS count
+            FROM filtered
+            GROUP BY metric_key
+        )
+        SELECT
+            stats.metric_key AS metric_key,
+            stats.count AS count,
+            (
+                SELECT f1.value
+                FROM filtered f1
+                WHERE f1.metric_key = stats.metric_key
+                ORDER BY f1.date ASC, f1.time ASC, f1.id ASC
+                LIMIT 1
+            ) AS first_value,
+            (
+                SELECT f2.value
+                FROM filtered f2
+                WHERE f2.metric_key = stats.metric_key
+                ORDER BY f2.date DESC, f2.time DESC, f2.id DESC
+                LIMIT 1
+            ) AS last_value
+        FROM stats
+        ORDER BY stats.metric_key ASC
+        """,
+        params,
+    ).fetchall()
+
+    trends: list[dict[str, str | float | int | None]] = []
+    for row in rows:
+        first_value = float(row["first_value"])
+        last_value = float(row["last_value"])
+        delta = last_value - first_value
+        if delta > 0:
+            direction = "up"
+        elif delta < 0:
+            direction = "down"
+        else:
+            direction = "flat"
+
+        percent_change: float | None
+        if first_value == 0:
+            percent_change = None
+        else:
+            percent_change = (delta / first_value) * 100
+
+        trends.append(
+            {
+                "metric_key": row["metric_key"],
+                "first_value": first_value,
+                "last_value": last_value,
+                "delta": delta,
+                "percent_change": percent_change,
+                "direction": direction,
+                "count": int(row["count"]),
+            }
+        )
+    return trends
+
+
 def _row_to_record(row: sqlite3.Row) -> MetricRecord:
     return MetricRecord(
         id=int(row["id"]),

@@ -48,6 +48,9 @@ metri query --last 7d
 
 # Get average values over the last 30 days
 metri query --last 30d --avg
+
+# View trend (first vs last value) over the last 30 days
+metri query --last 30d --trend
 ```
 
 ### Output Formats
