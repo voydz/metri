@@ -10,9 +10,21 @@ Install `metri` via Homebrew using the custom tap:
 brew install voydz/tap/metri
 ```
 
+Prebuilt binaries are published for:
+
+| Platform | Notes |
+| --- | --- |
+| macOS arm64 | Apple Silicon only |
+| Linux x86_64 | Homebrew on Linux (Linuxbrew), glibc 2.35 or newer |
+| Linux arm64 | Homebrew on Linux (Linuxbrew), glibc 2.35 or newer |
+
+Metrics are stored at `~/.local/share/metri/metrics.db` on every platform. Override the
+location with `METRI_DB_PATH`.
+
 ## Setup (Development)
 
 This project uses `uv` for dependency management and `PyInstaller` for standalone binaries.
+On Linux, PyInstaller additionally needs `objdump` (the `binutils` package).
 
 ```bash
 # Clone the repository
@@ -60,6 +72,23 @@ metri today --format json
 ```
 
 ## Build & Release
-- `make build` compiles a standalone `arm64` macOS binary using `PyInstaller`.
-- `make package` creates a `.tar.gz` archive with the binary and a sha256 checksum.
-- A GitHub Action automatically builds the binary on release and triggers `brew bump-formula-pr` in the `voydz/homebrew-tap`.
+- `make build` compiles a standalone binary for the host platform using `PyInstaller`.
+- `make smoke` builds the binary and exercises it against a throwaway `HOME`.
+- `make package` creates `dist/metri-<version>-<os>-<arch>.tar.gz` plus a sha256 checksum.
+- On release, a GitHub Action builds one binary per supported platform (`macos-14`,
+  `ubuntu-22.04`, `ubuntu-22.04-arm`), uploads them as release assets, renders the tap
+  formula from `packaging/metri.rb.tmpl`, and opens a pull request against
+  `voydz/homebrew-tap`.
+
+Linux binaries are built on `ubuntu-22.04` on purpose: a PyInstaller binary cannot run on a
+host whose glibc is older than the build host's, so this sets the compatibility floor at
+glibc 2.35 (Ubuntu 22.04, Debian 12, and newer).
+
+The formula carries a separate `url`/`sha256` per platform, which `brew bump-formula-pr`
+cannot express — it only rewrites a single pair. `packaging/render_formula.py` renders the
+whole formula instead:
+
+```bash
+python3 packaging/render_formula.py --version 0.1.0 --repo voydz/metri \
+  --sha256 darwin-arm64=... --sha256 linux-x86_64=... --sha256 linux-arm64=...
+```

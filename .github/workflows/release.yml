@@ -6,13 +6,23 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  build-and-bump-tap:
-    runs-on: macos-14  # Apple Silicon runner
-    env:
-      HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - runner: macos-14 # Apple Silicon
+            platform: darwin-arm64
+          # glibc 2.35: a PyInstaller binary cannot run on a host with an older
+          # glibc than the one it was built against, so build on the oldest
+          # supported runner rather than ubuntu-latest.
+          - runner: ubuntu-22.04
+            platform: linux-x86_64
+          - runner: ubuntu-22.04-arm
+            platform: linux-arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,42 +31,89 @@ jobs:
         with:
           enable-cache: true
 
+      # PyInstaller shells out to objdump when collecting shared libraries.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq binutils
+
       - name: Setup project
         run: |
-          uv python install 3.13
-          PYTHON_VERSION=3.13 make setup
+          uv python install "$(cat .python-version)"
+          make setup
 
-      - name: Build binary
-        run: make build
-
-      - name: Smoke test binary
-        run: ./dist/metri --help
+      - name: Build and smoke test binary
+        run: make smoke
 
       - name: Package tarball
+        id: package
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          TAR="metri-cli-${VERSION}-macos.tar.gz"
-          tar -czf "$TAR" -C dist metri
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "TAR=$TAR" >> "$GITHUB_ENV"
-
-      - name: Compute sha256
-        run: |
-          SHA256=$(shasum -a 256 "$TAR" | awk '{print $1}')
-          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
+          TAR="dist/metri-${VERSION}-${{ matrix.platform }}.tar.gz"
+          make package VERSION="$VERSION"
+          test -f "$TAR"
+          echo "tar=$TAR" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(cut -d' ' -f1 < "$TAR.sha256")" >> "$GITHUB_OUTPUT"
 
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "$GITHUB_REF_NAME" "$TAR" --clobber
+        run: gh release upload "$GITHUB_REF_NAME" "${{ steps.package.outputs.tar }}" --clobber
 
-      - name: Bump tap formula
+      - name: Record sha256
         run: |
-          URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${TAR}"
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          brew tap voydz/homebrew-tap
-          brew bump-formula-pr voydz/tap/metri \
-            --url "$URL" \
-            --sha256 "$SHA256"
+          mkdir -p shas
+          echo "${{ steps.package.outputs.sha256 }}" > "shas/${{ matrix.platform }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sha256-${{ matrix.platform }}
+          path: shas/
+
+  bump-tap:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sha256-*
+          merge-multiple: true
+          path: shas
+
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: voydz/homebrew-tap
+          token: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          path: tap
+
+      - name: Render formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          python3 packaging/render_formula.py \
+            --version "$VERSION" \
+            --repo "${{ github.repository }}" \
+            --sha256 "darwin-arm64=$(cat shas/darwin-arm64)" \
+            --sha256 "linux-x86_64=$(cat shas/linux-x86_64)" \
+            --sha256 "linux-arm64=$(cat shas/linux-arm64)" \
+            --output tap/Formula/metri.rb
+
+      - name: Open tap pull request
+        working-directory: tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="metri-$VERSION"
+          git checkout -b "$BRANCH"
+          git add Formula/metri.rb
+          git commit -m "metri $VERSION"
+          git push --force origin "$BRANCH"
+          gh pr create \
+            --title "metri $VERSION" \
+            --body "Automated release of metri $VERSION (darwin-arm64, linux-x86_64, linux-arm64)." \
+            --head "$BRANCH" \
+            || gh pr edit "$BRANCH" --title "metri $VERSION"
