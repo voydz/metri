@@ -1,15 +1,22 @@
 class Metri < Formula
   desc "CLI for logging and querying health/fitness metrics"
   homepage "https://github.com/@@REPO@@"
-  version "@@VERSION@@"
+  # Also the macOS default: brew style rejects url/sha256 directly inside on_macos,
+  # and nesting them under on_arm would leave Intel macOS with no url at all, which
+  # makes `brew readall --arch=all` fail. The on_macos guard below rejects Intel
+  # hosts before this binary can be installed on one.
+  url "@@URL_DARWIN_ARM64@@"
+  sha256 "@@SHA256_DARWIN_ARM64@@"
   license "MIT"
+
+  livecheck do
+    url :homepage
+    strategy :github_latest
+  end
 
   on_macos do
     # Prebuilt binaries are published for Apple Silicon only.
     depends_on arch: :arm64
-
-    url "@@URL_DARWIN_ARM64@@"
-    sha256 "@@SHA256_DARWIN_ARM64@@"
   end
 
   on_linux do
@@ -22,11 +29,6 @@ class Metri < Formula
       url "@@URL_LINUX_ARM64@@"
       sha256 "@@SHA256_LINUX_ARM64@@"
     end
-  end
-
-  livecheck do
-    url :homepage
-    strategy :github_latest
   end
 
   def install
