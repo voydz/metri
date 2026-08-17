@@ -1,0 +1,43 @@
+class Metri < Formula
+  desc "CLI for logging and querying health/fitness metrics"
+  homepage "https://github.com/@@REPO@@"
+  version "@@VERSION@@"
+  license "MIT"
+
+  on_macos do
+    # Prebuilt binaries are published for Apple Silicon only.
+    depends_on arch: :arm64
+
+    url "@@URL_DARWIN_ARM64@@"
+    sha256 "@@SHA256_DARWIN_ARM64@@"
+  end
+
+  on_linux do
+    on_intel do
+      url "@@URL_LINUX_X86_64@@"
+      sha256 "@@SHA256_LINUX_X86_64@@"
+    end
+
+    on_arm do
+      url "@@URL_LINUX_ARM64@@"
+      sha256 "@@SHA256_LINUX_ARM64@@"
+    end
+  end
+
+  livecheck do
+    url :homepage
+    strategy :github_latest
+  end
+
+  def install
+    bin.install "metri"
+  end
+
+  test do
+    assert_match "metri", shell_output("#{bin}/metri --help")
+
+    ENV["METRI_DB_PATH"] = testpath/"metrics.db"
+    system bin/"metri", "log", "--key", "weight_kg", "--value", "82.7"
+    assert_match "weight_kg", shell_output("#{bin}/metri today")
+  end
+end

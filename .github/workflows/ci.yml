@@ -28,3 +28,35 @@ jobs:
 
       - name: Test
         run: make test
+
+  # Catch packaging breakage on a PR rather than during a release.
+  build-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-14, ubuntu-22.04, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # PyInstaller shells out to objdump when collecting shared libraries.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq binutils
+
+      - name: Setup project
+        run: |
+          uv python install "$(cat .python-version)"
+          make setup
+
+      - name: Build and smoke test binary
+        run: make smoke
+
+      - name: Package tarball
+        run: make package
