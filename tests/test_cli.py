@@ -1,9 +1,25 @@
 import json
+import re
 import sys
 
 import pytest
 
 from metricli.__main__ import main
+
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+
+@pytest.fixture(autouse=True)
+def plain_wide_output(monkeypatch):
+    """Keep help rendering independent of the terminal rich thinks it is writing to.
+
+    Rich styles and hard-wraps its help output when colour is forced (FORCE_COLOR is
+    set in CI), which otherwise breaks substring assertions.
+    """
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.setenv("COLUMNS", "200")
 
 
 def test_main_prints_help_when_no_arguments(monkeypatch, capsys):
@@ -11,17 +27,17 @@ def test_main_prints_help_when_no_arguments(monkeypatch, capsys):
 
     main()
 
-    captured = capsys.readouterr()
-    assert "Usage: metri" in captured.out
-    assert "Log and query health/fitness metrics." in captured.out
-    assert "log" in captured.out
-    assert "Log a new metric entry." in captured.out
-    assert "delete" in captured.out
-    assert "Delete a metric by id." in captured.out
-    assert "today" in captured.out
-    assert "Show metrics logged today." in captured.out
-    assert "query" in captured.out
-    assert "Query metric history with optional aggregations." in captured.out
+    captured = ANSI_ESCAPE.sub("", capsys.readouterr().out)
+    assert "Usage: metri" in captured
+    assert "Log and query health/fitness metrics." in captured
+    assert "log" in captured
+    assert "Log a new metric entry." in captured
+    assert "delete" in captured
+    assert "Delete a metric by id." in captured
+    assert "today" in captured
+    assert "Show metrics logged today." in captured
+    assert "query" in captured
+    assert "Query metric history with optional aggregations." in captured
 
 
 def test_command_local_format_option_is_supported(monkeypatch, capsys):

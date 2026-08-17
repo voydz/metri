@@ -237,7 +237,10 @@ def _render(output_format: str, rows: Iterable[dict]) -> None:
 
 
 def _print_json(data: object) -> None:
-    console.print_json(json.dumps(data, ensure_ascii=False, indent=2, default=str))
+    # Deliberately not console.print_json: rich syntax-highlights it, which emits ANSI
+    # escapes whenever colour is forced (FORCE_COLOR, and some CI environments) and
+    # corrupts output piped into jq.
+    typer.echo(json.dumps(data, ensure_ascii=False, indent=2, default=str))
 
 
 def _exit_with_error(message: str) -> None:
